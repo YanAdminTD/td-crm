@@ -37,7 +37,7 @@ export default function FinancePage() {
     const { data } = await supabase
       .from('clients')
       .select('*')
-      .in('status', ['new','contacted','consultation','booked'])
+      .in('status', ['new_lead', 'in_progress'])
       .order('created_at', { ascending: false })
     return (data ?? []) as Client[]
   }, [supabase])

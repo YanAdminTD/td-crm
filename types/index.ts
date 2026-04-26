@@ -53,7 +53,14 @@ export interface Doctor {
 }
 
 // ─── Clients (KC-1 leads + KC-2 base) ────────────────────
-export type ClientStatus = 'new_lead' | 'contacted' | 'consultation' | 'booked' | 'paid' | 'declined' | 'active' | 'vip' | 'refund_requested'
+export type ClientStatus =
+  | 'new_lead'
+  | 'in_progress'
+  | 'lost'
+  | 'paid'
+  | 'active'
+  | 'vip'
+  | 'refund_requested'
 
 export interface Client {
   id:                  string
@@ -141,4 +148,5 @@ export interface Refund {
   clients?:        Client
   subscriptions?:  Subscription
   profiles?:       Profile
+  visit_at?: string
 }
