@@ -18,23 +18,26 @@ import type { Client } from '@/types'
    ───────────────────────────────────────────────────────── */
 
 const STATUS_LABEL: Record<string, string> = {
-  new_lead:     'Новый',
-  contacted:    'Связались',
-  consultation: 'Консультация',
-  booked:       'Записан',
-  paid:         'Оплачен',
-  declined:     'Отказ',
-}
-const STATUS_PILL: Record<string, string> = {
-  new_lead:     'p-new',
-  contacted:    'p-contact',
-  consultation: 'p-consult',
-  booked:       'p-done',
-  paid:         'p-paid',
-  declined:     'p-fail',
+  new_lead: 'Новый',
+  in_progress: 'Связались',
+  sold: 'Продан',
+  active_client: 'Клиент',
+  lost: 'Отказ',
+  refund_requested: 'Запрос возврата',
+  refunded: 'Возврат',
 }
 
-const KC1_STATUSES   = ['new_lead','contacted','consultation','booked','paid','declined']
+const STATUS_PILL: Record<string, string> = {
+  new_lead: 'p-new',
+  in_progress: 'p-contact',
+  sold: 'p-paid',
+  active_client: 'p-done',
+  lost: 'p-fail',
+  refund_requested: 'p-consult',
+  refunded: 'p-fail',
+}
+
+const KC1_STATUSES = ['new_lead', 'in_progress', 'lost']
 const SOURCE_OPTIONS = ['Instagram','WhatsApp','2GIS','Сайт','Звонок','Рекомендация']
 
 // расширенный Client с visit_at
