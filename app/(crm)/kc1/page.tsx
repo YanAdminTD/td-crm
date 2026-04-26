@@ -449,8 +449,9 @@ export default function KC1Page() {
               ) : (
                 clients.map(c => (
                   <tr
-                    key={c.id}
-                    style={{ cursor: 'default' }}
+                      key={c.id}
+                       style={{ cursor: 'pointer' }}
+                       onClick={() => setSelectedClient(c)}
                     onMouseOver={e => (e.currentTarget.style.background = '#FAFAF8')}
                     onMouseOut={e  => (e.currentTarget.style.background = '')}
                   >

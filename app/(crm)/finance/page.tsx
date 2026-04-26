@@ -101,21 +101,21 @@ export default function FinancePage() {
     setSaveError('')
 
     // Create subscription
-    const { data: sub, error: subErr } = await supabase
-      .from('subscriptions')
-      .insert({
-        client_id:        cartFor.id,
-        name:             abName.trim(),
-        total_visits:     cart.length,
-        used_visits:      0,
-        remaining_visits: cart.length,
-        status:           'active',
-        sold_by:          profile?.id ?? null,
-        created_at:       new Date().toISOString(),
-        updated_at:       new Date().toISOString(),
-      })
-      .select()
-      .single()
+   const { data: sub, error: subErr } = await supabase
+  .from('subscriptions')
+  .insert({
+  client_id: cartFor.id,
+  name: abName.trim(),
+  total_visits: cart.length,
+  used_visits: 0,
+  remaining_visits: cart.length, // 🔥 ВАЖНО
+  status: 'active',
+    sold_by: profile?.id ?? null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })
+  .select()
+  .single()
 
     if (subErr || !sub) {
       setSaveError(subErr?.message ?? 'Ошибка создания абонемента.')
