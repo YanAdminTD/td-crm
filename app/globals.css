@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=Forum&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Brand Tokens ─────────────────────────────────────── */
+:root {
+  --navy:       #1C3453;
+  --navy2:      #14263E;
+  --navy3:      #0D1D2E;
+  --navy-lt:    #253F5C;
+  --terra:      #B8563B;
+  --terra2:     #C96B4E;
+  --terra-lt:   #D4866E;
+  --terra-bg:   #F5EBE7;
+  --olive:      #777967;
+  --olive-bg:   #EDEEE9;
+  --beige:      #C0B3A6;
+  --cream:      #EDE8E1;
+  --cream2:     #F5F2EE;
+  --cream3:     #FAF8F5;
+  --border:     #DDD8D0;
+  --green:      #3D7A5C;
+  --green-bg:   #E8F4EE;
+  --red:        #B84040;
+  --red-bg:     #FAEAEA;
+  --amber:      #9A6B1A;
+  --amber-bg:   #FDF3E3;
+  --blue:       #2A5F8F;
+  --blue-bg:    #EAF1F8;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Open Sans', system-ui, sans-serif;
+    background: var(--cream2);
+    color: var(--navy);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  /* Pill status badges */
+  .pill { @apply inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide whitespace-nowrap; }
+  .pill-new        { background: var(--blue-bg);  color: var(--blue);   }
+  .pill-contact    { background: var(--amber-bg); color: var(--amber);  }
+  .pill-consult    { background: var(--olive-bg); color: var(--olive);  }
+  .pill-done       { background: var(--green-bg); color: var(--green);  }
+  .pill-fail       { background: var(--red-bg);   color: var(--red);    }
+  .pill-paid       { background: var(--terra-bg); color: var(--terra);  }
+  .pill-active     { background: var(--green-bg); color: var(--green);  }
+  .pill-vip        { background: var(--terra-bg); color: var(--terra);  }
+  .pill-arrived    { background: var(--green-bg); color: var(--green);  }
+  .pill-noshow     { background: var(--red-bg);   color: var(--red);    }
+  .pill-indoctor   { background: var(--blue-bg);  color: var(--blue);   }
+  .pill-completed  { background: var(--green-bg); color: #2A5E3F;        }
+  .pill-refund     { background: var(--red-bg);   color: var(--red);    }
+  .pill-resolved   { background: var(--green-bg); color: var(--green);  }
+
+  /* Cards */
+  .td-card { @apply bg-white rounded-xl border p-4 mb-3; border-color: var(--border); }
+  .td-card-title { @apply text-[10px] font-bold tracking-widest uppercase mb-3 flex items-center justify-between; color: var(--navy); }
+
+  /* Table */
+  .td-table { @apply w-full border-collapse text-[11px]; }
+  .td-table th { @apply font-semibold text-left p-[7px_8px] border-b text-[9px] tracking-widest uppercase whitespace-nowrap; background: var(--cream2); border-color: var(--cream); color: #8A9BB0; }
+  .td-table td { @apply p-[8px_8px] border-b align-middle; border-color: var(--cream); }
+  .td-table tbody tr:hover td { background: var(--cream2); }
+  .td-table tr:last-child td  { @apply border-b-0; }
+
+  /* Buttons */
+  .btn { @apply cursor-pointer rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-all; border-color: var(--border); background: var(--cream2); color: var(--navy); font-family: 'Open Sans', sans-serif; }
+  .btn:hover    { filter: brightness(.95); }
+  .btn:active   { transform: scale(.98); }
+  .btn-navy     { background: var(--navy);  @apply text-white border-0; }
+  .btn-terra    { background: var(--terra); @apply text-white border-0; }
+  .btn-green    { background: var(--green); @apply text-white border-0; }
+  .btn-red      { background: var(--red);   @apply text-white border-0; }
+  .btn-olive    { background: var(--olive); @apply text-white border-0; }
+  .btn-sm       { @apply text-[9px] px-2 py-0.5; }
+
+  /* Form inputs */
+  .td-input { @apply w-full rounded-lg border px-3 py-2 text-[12px] outline-none transition-colors; border-color: var(--border); background: var(--cream2); color: var(--navy); font-family: 'Open Sans', sans-serif; }
+  .td-input:focus { border-color: var(--terra); }
+  .td-label { @apply block text-[9px] font-bold tracking-widest uppercase mb-1; color: #8A9BB0; }
+
+  /* Info bar */
+  .td-infobar { @apply rounded-lg px-3 py-2 text-[10px] mb-3 leading-relaxed; background: var(--cream); border-left: 3px solid var(--terra); color: #4A5568; }
+
+  /* Progress */
+  .td-prog { @apply h-[5px] rounded-full overflow-hidden; background: var(--cream); }
+  .td-prog-fill { @apply h-full rounded-full; background: var(--terra); }
+
+  /* Avatar */
+  .td-av { @apply rounded-full inline-flex items-center justify-center font-bold flex-shrink-0; }
+  .td-av-navy  { background: var(--navy);  @apply text-white; }
+  .td-av-terra { background: var(--terra); @apply text-white; }
+  .td-av-olive { background: var(--olive); @apply text-white; }
+  .td-av-green { background: var(--green); @apply text-white; }
+  .td-av-beige { background: var(--beige); color: var(--navy); }
+
+  /* Source tag */
+  .td-tag { @apply text-[9px] px-[7px] py-0.5 rounded-full border whitespace-nowrap; background: var(--cream); border-color: var(--border); color: #4A5568; }
+}
