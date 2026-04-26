@@ -116,6 +116,15 @@ export default function FinancePage() {
   .select()
   .single()
 
+    // ✅ переводим клиента в КЦ-2
+await supabase
+  .from('clients')
+  .update({
+    status: 'active_client',
+    updated_at: new Date().toISOString()
+  })
+  .eq('id', cartFor.id)
+
     if (subErr || !sub) {
       setSaveError(subErr?.message ?? 'Ошибка создания абонемента.')
       setSaving(false)
