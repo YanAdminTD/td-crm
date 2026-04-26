@@ -44,7 +44,7 @@ export default function KC2Page() {
           id, name, total_visits, used_visits, remaining_visits, status, created_at
         )
       `)
-      .in('status', ['paid','active','vip','refund_requested'])
+      .eq('status', 'active_client')
       .order('created_at', { ascending: false })
     if (!error) setClients((data ?? []) as ClientWithSubs[])
     setLoading(false)
