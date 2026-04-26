@@ -118,6 +118,7 @@ export default function KC1Page() {
 
   /* ── data ────────────────────────────────────────────── */
   const [clients,    setClients]    = useState<ClientWithVisit[]>([])
+  const [selectedClient, setSelectedClient] = useState<ClientWithVisit | null>(null)
   const [loading,    setLoading]    = useState(true)
   const [fetchErr,   setFetchErr]   = useState('')
 
