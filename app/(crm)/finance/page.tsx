@@ -1,39 +1,80 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/lib/hooks/useAuth'
-import type { Client, Service, Subscription } from '@/types'
+import type { Client, Service } from '@/types'
 
-const CATS_ORDER = ['Инъекции', 'Мезо', 'Лазер', 'Уход', 'Другое']
+/* ─────────────────────────────────────────────────────────
+   Finance page — Оформление абонементов
+   Исправления:
+   1. loadKC2 → .eq('status', 'active_client')
+   2. После оформления → status = 'active_client'
+   3. subscription_services создаются для ВСЕХ услуг корзины
+   4. total_visits = cart.length, used_visits = 0
+   5. remaining_visits не вставляется (generated column)
+   6. После оформления: закрыть корзину, refetch списка
+   ───────────────────────────────────────────────────────── */
 
 const CHECK = (
   <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-    <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="white" strokeWidth="1.5"
+      strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
+const STATUS_LABEL: Record<string, string> = {
+  new_lead:      'Новый лид',
+  in_progress:   'В работе',
+  active_client: 'Клиент КЦ-2',
+  paid:          'Оплачен',
+  active:        'Активный',
+  vip:           'VIP',
+  lost:          'Отказ',
+}
+const STATUS_PILL: Record<string, string> = {
+  new_lead:      'p-new',
+  in_progress:   'p-contact',
+  active_client: 'p-active',
+  paid:          'p-paid',
+  active:        'p-active',
+  vip:           'p-vip',
+  lost:          'p-fail',
+}
+
+/* ── styles ──────────────────────────────────────────────── */
+const sLabel: React.CSSProperties = {
+  display: 'block', fontSize: 9, fontWeight: 700, color: '#8A9BB0',
+  letterSpacing: '.07em', textTransform: 'uppercase', marginBottom: 4,
+}
+const sInput: React.CSSProperties = {
+  width: '100%', padding: '8px 11px', borderRadius: 8,
+  border: '1px solid #DDD8D0', background: '#F5F2EE',
+  fontSize: 12, color: '#20364A', fontFamily: 'inherit', outline: 'none',
+}
+
 export default function FinancePage() {
   const { profile } = useAuth()
-  const router = useRouter()
-  const supabase = createClient()
+  const supabase    = createClient()
 
-  const [tab, setTab]           = useState(0)
-  const [clients, setClients]   = useState<Client[]>([])
+  const [tab,      setTab]      = useState(0)
+  const [clients,  setClients]  = useState<Client[]>([])
   const [services, setServices] = useState<Service[]>([])
-  const [loading, setLoading]   = useState(true)
+  const [loading,  setLoading]  = useState(true)
 
-  // Cart state
-  const [cartFor, setCartFor]   = useState<Client | null>(null)
-  const [cart, setCart]         = useState<string[]>([])
-  const [abName, setAbName]     = useState('')
-  const [abTotal, setAbTotal]   = useState('')
-  const [saving, setSaving]     = useState(false)
+  /* cart */
+  const [cartFor,   setCartFor]   = useState<Client | null>(null)
+  const [cart,      setCart]      = useState<string[]>([])
+  const [abName,    setAbName]    = useState('')
+  const [abTotal,   setAbTotal]   = useState('')
+  const [saving,    setSaving]    = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [saveOk,    setSaveOk]    = useState('')
 
-  // Load KC-1 (status: new/contacted/consultation/booked)
-  const loadKC1 = useCallback(async () => {
+  /* ── data loaders ───────────────────────────────────── */
+
+  // KC-1: лиды ожидающие перевода
+  const loadKC1 = useCallback(async (): Promise<Client[]> => {
     const { data } = await supabase
       .from('clients')
       .select('*')
@@ -42,17 +83,17 @@ export default function FinancePage() {
     return (data ?? []) as Client[]
   }, [supabase])
 
-  // Load KC-2 (status: paid/active/vip)
-  const loadKC2 = useCallback(async () => {
+  // KC-2: ТОЛЬКО статус active_client
+  const loadKC2 = useCallback(async (): Promise<Client[]> => {
     const { data } = await supabase
       .from('clients')
       .select('*')
-      .in('status', ['paid','active','vip'])
+      .eq('status', 'active_client')
       .order('created_at', { ascending: false })
     return (data ?? []) as Client[]
   }, [supabase])
 
-  const loadServices = useCallback(async () => {
+  const loadServices = useCallback(async (): Promise<Service[]> => {
     const { data } = await supabase
       .from('services')
       .select('*, service_categories(name)')
@@ -61,69 +102,71 @@ export default function FinancePage() {
     return (data ?? []) as Service[]
   }, [supabase])
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      const [kc1, kc2, svcs] = await Promise.all([loadKC1(), loadKC2(), loadServices()])
-      // tab 0 = kc1, tab 1 = kc2
-      setClients(tab === 0 ? kc1 : kc2)
-      setServices(svcs)
-      setLoading(false)
-    }
-    load()
+  const reloadAll = useCallback(async () => {
+    setLoading(true)
+    const [list, svcs] = await Promise.all([
+      tab === 0 ? loadKC1() : loadKC2(),
+      loadServices(),
+    ])
+    setClients(list)
+    setServices(svcs)
+    setLoading(false)
   }, [tab, loadKC1, loadKC2, loadServices])
 
+  useEffect(() => { reloadAll() }, [reloadAll])
+
+  /* ── cart helpers ──────────────────────────────────── */
   const openCart = (client: Client) => {
     setCartFor(client)
     setCart([])
     setAbName('')
     setAbTotal('')
     setSaveError('')
+    setSaveOk('')
   }
-
-  const toggleCart = (id: string) => {
+  const closeCart = () => {
+    setCartFor(null)
+    setCart([])
+    setSaveError('')
+  }
+  const toggleCart = (id: string) =>
     setCart(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
 
-  const listTotal = cart.reduce((s, id) => {
-    const svc = services.find(x => x.id === id)
-    return s + (svc?.price ?? 0)
-  }, 0)
+  const listTotal = cart.reduce(
+    (sum, id) => sum + (services.find(x => x.id === id)?.price ?? 0),
+    0
+  )
 
+  /* ── оформить абонемент ─────────────────────────────── */
   const saveCart = async () => {
-    if (!cartFor) return
-    if (!abName.trim()) { setSaveError('Введите название абонемента.'); return }
-    if (!cart.length)   { setSaveError('Выберите хотя бы одну процедуру.'); return }
-    const total = parseInt(abTotal) || listTotal
-    if (!total)         { setSaveError('Введите сумму.'); return }
+    if (!cartFor)          return
+    if (!abName.trim())    { setSaveError('Введите название абонемента.'); return }
+    if (cart.length === 0) { setSaveError('Выберите хотя бы одну процедуру.'); return }
+
+    const totalAmount = parseInt(abTotal) || listTotal
+    if (!totalAmount)      { setSaveError('Введите сумму.'); return }
 
     setSaving(true)
     setSaveError('')
 
-    // Create subscription
-  const { data: sub, error: subErr } = await supabase
-  .from('subscriptions')
-  .insert({
-    client_id: cartFor.id,
-    name: abName.trim(),
-    total_visits: cart.length,
-    used_visits: 0,
-    status: 'active',
-    sold_by: profile?.id ?? null,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
-  .select()
-  .single()
-
-    // ✅ переводим клиента в КЦ-2
-await supabase
-  .from('clients')
-  .update({
-    status: 'active_client',
-    updated_at: new Date().toISOString()
-  })
-  .eq('id', cartFor.id)
+    /* 1. Создать subscription
+          total_visits  = cart.length
+          used_visits   = 0
+          remaining_visits НЕ вставляем (generated column) */
+    const { data: sub, error: subErr } = await supabase
+      .from('subscriptions')
+      .insert({
+        client_id:    cartFor.id,
+        name:         abName.trim(),
+        total_visits: cart.length,   // = количество выбранных услуг
+        used_visits:  0,
+        status:       'active',
+        sold_by:      profile?.id ?? null,
+        created_at:   new Date().toISOString(),
+        updated_at:   new Date().toISOString(),
+      })
+      .select()
+      .single()
 
     if (subErr || !sub) {
       setSaveError(subErr?.message ?? 'Ошибка создания абонемента.')
@@ -131,95 +174,146 @@ await supabase
       return
     }
 
-    // Create subscription_services rows
-    const rows = cart.map(svcId => ({
+    /* 2. Создать subscription_services для КАЖДОЙ услуги из cart
+          cart.map(serviceId => ...) — все услуги, не только первая */
+    const svcRows = cart.map(serviceId => ({
       subscription_id: sub.id,
-      service_id:      svcId,
+      service_id:      serviceId,
       allowed_visits:  1,
       used_visits:     0,
       created_at:      new Date().toISOString(),
     }))
-    await supabase.from('subscription_services').insert(rows)
 
-    // Update client status to 'paid'
-    await supabase
+    const { error: svcErr } = await supabase
+      .from('subscription_services')
+      .insert(svcRows)
+
+    if (svcErr) {
+      // Откат: удаляем подписку если услуги не сохранились
+      await supabase.from('subscriptions').delete().eq('id', sub.id)
+      setSaveError('Ошибка сохранения процедур: ' + svcErr.message)
+      setSaving(false)
+      return
+    }
+
+    /* 3. Перевести клиента в КЦ-2 → status = 'active_client' */
+    const { error: clientErr } = await supabase
       .from('clients')
-      .update({ status: 'paid', updated_at: new Date().toISOString() })
+      .update({
+        status:     'active_client',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', cartFor.id)
 
-    setCartFor(null)
-    setCart([])
-    router.refresh()
-    // Reload table
-    const updated = tab === 0 ? await loadKC1() : await loadKC2()
-    setClients(updated)
+    if (clientErr) {
+      setSaveError('Абонемент создан, но статус клиента не обновился: ' + clientErr.message)
+      setSaving(false)
+      return
+    }
+
+    /* 4. Успех: закрыть корзину, обновить список
+          tab 0 → клиент исчезнет из KC-1 (статус сменился)
+          tab 1 → список KC-2 обновится */
+    const name = cartFor.full_name
+    closeCart()
     setSaving(false)
+    setSaveOk(`✓ Абонемент «${abName.trim()}» оформлен. ${name} переведён в КЦ-2.`)
+    await reloadAll()
   }
 
-  const STATUS_LABEL: Record<string, string> = {
-    new:'Новый', contacted:'Связались', consultation:'Консультация',
-    booked:'Записан', paid:'Оплачен', active:'Активный', vip:'VIP',
-  }
-  const STATUS_PILL: Record<string, string> = {
-    new:'p-new', contacted:'p-contact', consultation:'p-consult',
-    booked:'p-done', paid:'p-paid', active:'p-active', vip:'p-vip',
-  }
+  /* ── группировка услуг по категориям ──────────────────── */
+  const catMap: Record<string, Service[]> = {}
+  services.forEach(s => {
+    const cat = (s as any).service_categories?.name ?? 'Другое'
+    if (!catMap[cat]) catMap[cat] = []
+    catMap[cat].push(s)
+  })
+  const catKeys = Object.keys(catMap).sort()
 
-  // ── CART VIEW ──────────────────────────────────────────
+  /* ══════════════════════════════════════════════════════
+     CART VIEW
+  ══════════════════════════════════════════════════════ */
   if (cartFor) {
-    const cats = CATS_ORDER.filter(c => services.some(s => (s as any).service_categories?.name === c || (s.category_id && !s.id.startsWith('_'))))
-    // group by category name from join
-    const catMap: Record<string, Service[]> = {}
-    services.forEach(s => {
-      const cat = (s as any).service_categories?.name ?? 'Другое'
-      if (!catMap[cat]) catMap[cat] = []
-      catMap[cat].push(s)
-    })
-    const catKeys = Object.keys(catMap).sort()
-
     return (
       <div>
-        <button className="btn mb-4" onClick={() => setCartFor(null)} style={{ cursor:'pointer', fontFamily:'inherit' }}>← Назад</button>
-        <div style={{ fontFamily:'Forum, serif', fontSize:18, color:'#1C3453', marginBottom:14 }}>
-          Оформление абонемента — {cartFor.full_name}
+        <button onClick={closeCart} style={{
+          padding: '7px 14px', borderRadius: 8, marginBottom: 14,
+          background: '#F5F2EE', color: '#20364A',
+          border: '1px solid #DDD8D0', fontSize: 12,
+          cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          ← Назад
+        </button>
+
+        <div style={{ fontFamily: 'Forum, serif', fontSize: 18, color: '#20364A', marginBottom: 3 }}>
+          Оформление абонемента
+        </div>
+        <div style={{ fontSize: 11, color: '#8A9BB0', marginBottom: 16 }}>
+          Клиент: <strong style={{ color: '#20364A' }}>{cartFor.full_name}</strong> · {cartFor.phone}
         </div>
 
         {saveError && (
-          <div className="mb-3 px-3 py-2 rounded-lg text-[11px]"
-            style={{ background:'#FAEAEA', border:'1px solid #F0C0C0', color:'#B84040' }}>
+          <div style={{
+            marginBottom: 12, padding: '9px 13px', borderRadius: 9,
+            background: '#FAEAEA', border: '1px solid #F0C0C0', color: '#B84040', fontSize: 11,
+          }}>
             {saveError}
           </div>
         )}
 
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:14, alignItems:'start' }}>
-          {/* Left: service picker */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
+
+          {/* ── услуги ─────────────────────────────── */}
           <div>
-            {catKeys.map(cat => (
-              <div key={cat} className="td-card mb-3">
-                <div className="td-card-title">{cat}</div>
+            {catKeys.length === 0 ? (
+              <div style={{
+                background: '#fff', border: '1px solid #DDD8D0', borderRadius: 14,
+                padding: 36, textAlign: 'center', color: '#8A9BB0', fontSize: 12,
+              }}>
+                Нет активных услуг. Добавьте услуги в разделе Управление.
+              </div>
+            ) : catKeys.map(cat => (
+              <div key={cat} style={{
+                background: '#fff', border: '1px solid #DDD8D0',
+                borderRadius: 12, padding: '14px 16px', marginBottom: 10,
+              }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, color: '#8A9BB0',
+                  textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 10,
+                }}>
+                  {cat}
+                </div>
+
                 {catMap[cat].map(s => {
                   const sel = cart.includes(s.id)
                   return (
-                    <div key={s.id}
+                    <div
+                      key={s.id}
                       onClick={() => toggleCart(s.id)}
                       style={{
-                        display:'flex', alignItems:'center', gap:9,
-                        padding:'9px 11px', borderRadius:9, marginBottom:5,
-                        cursor:'pointer',
-                        border:`1px solid ${sel?'#9FD4B8':'#DDD8D0'}`,
-                        background: sel?'#E8F4EE':'#fff',
-                      }}>
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '9px 11px', borderRadius: 9, marginBottom: 5,
+                        cursor: 'pointer',
+                        border: `1px solid ${sel ? '#9FD4B8' : '#EDE8E1'}`,
+                        background: sel ? '#E8F4EE' : '#FAFAFA',
+                        transition: 'all .1s',
+                      }}
+                    >
                       <div style={{
-                        width:15, height:15, borderRadius:4, flexShrink:0,
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                        background: sel?'#3D7A5C':'transparent',
-                        border:`1.5px solid ${sel?'#3D7A5C':'#DDD8D0'}`,
-                      }}>{sel&&CHECK}</div>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:12, fontWeight:500 }}>{s.name}</div>
-                        {s.duration_minutes && <div style={{ fontSize:10, color:'#8A9BB0' }}>{s.duration_minutes} мин</div>}
+                        width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: sel ? '#3D7A5C' : 'transparent',
+                        border: `1.5px solid ${sel ? '#3D7A5C' : '#DDD8D0'}`,
+                      }}>
+                        {sel && CHECK}
                       </div>
-                      <div style={{ fontSize:12, fontWeight:600, color:sel?'#3D7A5C':'#1C3453' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: '#20364A' }}>{s.name}</div>
+                        {s.duration_minutes && (
+                          <div style={{ fontSize: 10, color: '#8A9BB0', marginTop: 1 }}>{s.duration_minutes} мин</div>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: sel ? '#3D7A5C' : '#20364A' }}>
                         {s.price.toLocaleString('ru')} ₸
                       </div>
                     </div>
@@ -227,98 +321,198 @@ await supabase
                 })}
               </div>
             ))}
-            {catKeys.length === 0 && (
-              <div className="td-card text-center py-8" style={{ color:'#8A9BB0', fontSize:11 }}>
-                Нет активных услуг. Добавьте услуги в разделе Управление.
-              </div>
-            )}
           </div>
 
-          {/* Right: cart */}
+          {/* ── корзина ────────────────────────────── */}
           <div>
-            <div className="td-card" style={{ position:'sticky', top:0 }}>
-              <div style={{ fontFamily:'Forum, serif', fontSize:14, color:'#1C3453', marginBottom:12 }}>Корзина</div>
+            <div style={{
+              background: '#fff', border: '1px solid #DDD8D0',
+              borderRadius: 14, padding: 18, position: 'sticky', top: 0,
+              boxShadow: '0 4px 16px rgba(32,54,74,.08)',
+            }}>
+              <div style={{ fontFamily: 'Forum, serif', fontSize: 15, color: '#20364A', marginBottom: 12 }}>
+                Корзина
+              </div>
+
               {cart.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'20px 0', color:'#8A9BB0', fontSize:12 }}>
-                  ← Выберите процедуры
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#8A9BB0', fontSize: 12 }}>
+                  ← Выберите процедуры слева
                 </div>
               ) : (
                 <>
+                  {/* выбранные услуги */}
                   {cart.map(id => {
                     const s = services.find(x => x.id === id)
                     if (!s) return null
                     return (
-                      <div key={id} style={{ display:'flex', alignItems:'center', gap:7, padding:'7px 9px', background:'#F5F2EE', borderRadius:8, marginBottom:4, border:'1px solid #DDD8D0' }}>
-                        <div style={{ flex:1, fontSize:11, fontWeight:500 }}>{s.name}</div>
-                        <div style={{ fontSize:11, color:'#4A5568', marginRight:6 }}>{s.price.toLocaleString('ru')} ₸</div>
-                        <span onClick={() => toggleCart(id)} style={{ cursor:'pointer', color:'#8A9BB0', fontSize:15, lineHeight:1 }}>×</span>
+                      <div key={id} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '7px 10px', background: '#F5F2EE',
+                        borderRadius: 8, marginBottom: 5, border: '1px solid #EDE8E1',
+                      }}>
+                        <div style={{ flex: 1, fontSize: 11, fontWeight: 500, color: '#20364A' }}>{s.name}</div>
+                        <div style={{ fontSize: 11, color: '#4A5568', marginRight: 4 }}>
+                          {s.price.toLocaleString('ru')} ₸
+                        </div>
+                        <button onClick={() => toggleCart(id)} style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#8A9BB0', fontSize: 16, lineHeight: 1, padding: 0,
+                        }}>×</button>
                       </div>
                     )
                   })}
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'9px 0 5px', borderTop:'1px solid #EDE8E1', marginTop:6, fontSize:11, color:'#4A5568' }}>
+
+                  {/* итог */}
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    padding: '8px 0 5px', borderTop: '1px solid #EDE8E1', marginTop: 6,
+                    fontSize: 11, color: '#4A5568',
+                  }}>
                     <span>Прайс ({cart.length} проц.)</span>
-                    <span>{listTotal.toLocaleString('ru')} ₸</span>
+                    <span style={{ fontWeight: 600 }}>{listTotal.toLocaleString('ru')} ₸</span>
                   </div>
-                  <div className="frow mt-3">
-                    <label className="td-label">Название абонемента *</label>
-                    <input className="td-input" value={abName} onChange={e=>setAbName(e.target.value)} placeholder="Инъекционный курс"/>
+
+                  {/* форма */}
+                  <div style={{ marginTop: 12 }}>
+                    <label style={sLabel}>Название абонемента *</label>
+                    <input
+                      style={sInput} value={abName}
+                      onChange={e => setAbName(e.target.value)}
+                      placeholder="Инъекционный курс"
+                    />
                   </div>
-                  <div className="frow">
-                    <label className="td-label">Итоговая сумма (₸) *</label>
-                    <input className="td-input" type="number" value={abTotal} onChange={e=>setAbTotal(e.target.value)} placeholder={String(listTotal)}/>
+                  <div style={{ marginTop: 10 }}>
+                    <label style={sLabel}>Итоговая сумма (₸) *</label>
+                    <input
+                      style={sInput} type="number" value={abTotal}
+                      onChange={e => setAbTotal(e.target.value)}
+                      placeholder={String(listTotal)}
+                    />
+                    <div style={{ fontSize: 9, color: '#8A9BB0', marginTop: 3 }}>
+                      Финансист вводит финальную сумму с учётом скидок.
+                    </div>
                   </div>
-                  <div style={{ fontSize:9, color:'#8A9BB0', marginBottom:10 }}>
-                    Финансист вводит финальную сумму с учётом скидок.
-                  </div>
-                  <button className="btn btn-green" style={{ width:'100%', padding:'9px', fontSize:12, cursor:saving?'not-allowed':'pointer', fontFamily:'inherit', opacity:saving?.65:1 }}
-                    onClick={saveCart} disabled={saving}>
-                    {saving ? 'Сохранение...' : 'Оформить абонемент ✓'}
+
+                  <button
+                    onClick={saveCart}
+                    disabled={saving}
+                    style={{
+                      width: '100%', padding: '11px', marginTop: 14,
+                      borderRadius: 9, border: 'none',
+                      background: saving ? '#ccc' : '#3D7A5C',
+                      color: '#fff', fontSize: 13, fontWeight: 600,
+                      cursor: saving ? 'not-allowed' : 'pointer',
+                      fontFamily: 'inherit',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    }}
+                  >
+                    {saving && (
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"
+                        style={{ animation: 'spin 1s linear infinite' }}>
+                        <circle cx="6.5" cy="6.5" r="5.5" stroke="rgba(255,255,255,.4)" strokeWidth="1.5"/>
+                        <path d="M6.5 1A5.5 5.5 0 0 1 12 6.5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                    {saving ? 'Оформление...' : 'Оформить абонемент ✓'}
                   </button>
                 </>
               )}
             </div>
           </div>
         </div>
+
+        <style jsx global>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
-  // ── MAIN FINANCE VIEW ──────────────────────────────────
+  /* ══════════════════════════════════════════════════════
+     MAIN VIEW
+  ══════════════════════════════════════════════════════ */
   return (
     <div>
-      <div className="flex mb-4" style={{ borderBottom:'1px solid #DDD8D0' }}>
+      {/* success */}
+      {saveOk && (
+        <div style={{
+          marginBottom: 12, padding: '10px 14px', borderRadius: 10,
+          background: '#E8F4EE', border: '1px solid #9FD4B8', color: '#3D7A5C',
+          fontSize: 11, display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {saveOk}
+          <button onClick={() => setSaveOk('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#3D7A5C', fontSize: 14 }}>×</button>
+        </div>
+      )}
+
+      {/* tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #DDD8D0', marginBottom: 14 }}>
         {['Перевод КЦ-1 → КЦ-2', 'Доп. абонемент (КЦ-2)'].map((t, i) => (
           <button key={t} onClick={() => setTab(i)} style={{
-            padding:'7px 15px', fontSize:11, fontWeight:500,
-            cursor:'pointer', background:'none', border:'none',
-            borderBottom:`2px solid ${tab===i?'#B8563B':'transparent'}`,
-            marginBottom:-1, color:tab===i?'#B8563B':'#8A9BB0', fontFamily:'inherit',
+            padding: '8px 16px', fontSize: 11, fontWeight: 500,
+            cursor: 'pointer', background: 'none', border: 'none',
+            borderBottom: `2px solid ${tab === i ? '#C45C3C' : 'transparent'}`,
+            marginBottom: -1, color: tab === i ? '#C45C3C' : '#8A9BB0',
+            fontFamily: 'inherit',
           }}>{t}</button>
         ))}
       </div>
 
-      <div className="td-infobar">
+      {/* info bar */}
+      <div style={{
+        background: '#ECE7E2', borderRadius: 8, padding: '8px 13px',
+        fontSize: 11, color: '#4A5568', marginBottom: 14,
+        borderLeft: '3px solid #C45C3C', lineHeight: 1.6,
+      }}>
         {tab === 0
-          ? 'Выберите лида из КЦ-1 и оформите абонемент. После оплаты клиент перейдёт в базу КЦ-2.'
-          : 'Оформите новый или дополнительный абонемент для существующего клиента.'}
+          ? 'Выберите лида из КЦ-1 и оформите абонемент. После оформления клиент получит статус «Клиент КЦ-2».'
+          : 'Оформите дополнительный абонемент для клиента со статусом «Клиент КЦ-2».'}
       </div>
 
+      {/* list */}
       {loading ? (
-        <div className="text-center py-10" style={{ color:'#8A9BB0', fontSize:11 }}>Загрузка...</div>
+        <div style={{ textAlign: 'center', padding: '50px 0', color: '#8A9BB0', fontSize: 12 }}>Загрузка...</div>
       ) : clients.length === 0 ? (
-        <div className="text-center py-10" style={{ color:'#8A9BB0', fontSize:11 }}>
-          {tab === 0 ? 'Нет лидов для перевода' : 'Нет клиентов в КЦ-2'}
+        <div style={{
+          background: '#fff', border: '1px solid #DDD8D0', borderRadius: 14,
+          padding: 40, textAlign: 'center', color: '#8A9BB0', fontSize: 12,
+        }}>
+          {tab === 0 ? 'Нет лидов для перевода в КЦ-2' : 'Нет клиентов со статусом «Клиент КЦ-2»'}
         </div>
       ) : (
         clients.map(cl => (
-          <div key={cl.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid #DDD8D0', borderRadius:10, marginBottom:7, background:'#fff' }}>
-            <div className="td-av td-av-navy" style={{ width:30, height:30, fontSize:11 }}>{cl.full_name[0]}</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:500, fontSize:12 }}>{cl.full_name}</div>
-              <div style={{ fontSize:10, color:'#4A5568' }}>{cl.phone}{cl.source ? ` · ${cl.source}` : ''}</div>
+          <div key={cl.id} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '12px 14px', border: '1px solid #DDD8D0',
+            borderRadius: 12, marginBottom: 8, background: '#fff',
+            boxShadow: '0 1px 4px rgba(32,54,74,.05)',
+          }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+              background: '#20364A', color: '#ECE7E2',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, fontWeight: 700,
+            }}>
+              {(cl.full_name[0] ?? '?').toUpperCase()}
             </div>
-            <span className={`pill ${STATUS_PILL[cl.status]??'p-new'}`}>{STATUS_LABEL[cl.status]??cl.status}</span>
-            <button className="btn btn-green" onClick={() => openCart(cl)} style={{ cursor:'pointer', fontFamily:'inherit' }}>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: '#20364A' }}>{cl.full_name}</div>
+              <div style={{ fontSize: 11, color: '#4A5568', marginTop: 2 }}>
+                {cl.phone}
+                {cl.source && <span style={{ marginLeft: 8, color: '#8A9BB0' }}>· {cl.source}</span>}
+              </div>
+            </div>
+
+            <span className={`pill ${STATUS_PILL[cl.status] ?? 'p-new'}`}>
+              {STATUS_LABEL[cl.status] ?? cl.status}
+            </span>
+
+            <button onClick={() => openCart(cl)} style={{
+              padding: '7px 16px', borderRadius: 8,
+              background: tab === 0 ? '#3D7A5C' : '#20364A',
+              color: '#fff', border: 'none',
+              fontSize: 12, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+            }}>
               {tab === 0 ? 'Оформить абонемент →' : '+ Новый абонемент'}
             </button>
           </div>

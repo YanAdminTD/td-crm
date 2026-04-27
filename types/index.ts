@@ -60,6 +60,7 @@ export type ClientStatus =
   | 'paid'
   | 'active'
   | 'vip'
+  | 'active_client'
   | 'refund_requested'
 
 export interface Client {
